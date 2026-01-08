@@ -3,48 +3,62 @@ import time
 import random
 import utime
 from lcd1602 import LCD
-#test1
+
 SEGCODE = [0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f]
 
-sdi = machine.Pin(18,machine.Pin.OUT)
-rclk = machine.Pin(19,machine.Pin.OUT)
-srclk = machine.Pin(20,machine.Pin.OUT)
+sdi = machine.Pin(18,machine.Pin.OUT) #sdi(serial data input) is where the 1's and 0's go
+rclk = machine.Pin(19,machine.Pin.OUT) #rclk(register clk) is the post button where when it pulses, the chip takes whatever is in memory and pushes it to the leds
+srclk = machine.Pin(20,machine.Pin.OUT) #shift register clk is on posedge clk, shifts data down led
 
-placePin = []
-pin = [10,13,12,11]
-for i in range(4):
-    placePin.append(None)
-    placePin[i] = machine.Pin(pin[i], machine.Pin.OUT)
+#we do this entire chunk because if we ever change the pins, we dont want to replace every spot it says pin #10
+placePin = [] #create empty arr 
+pin = [10,13,12,11] #create arr of pins 10-13
+for i in range(4): 
+    placePin.append(None) #adds placeholder - You cannot assign a value to placePin[0] if slot 0 doesn't exist yet.
+    placePin[i] = machine.Pin(pin[i], machine.Pin.OUT)  #assigns the spot in the array to the object pin 10
+#function that pickes which digit to show at one time - cant do all of them at once becuase all connected
 
+def log_to_csv(mode, time_ms):
+    try:
+        # Open 'reaction_data.csv' in append mode ('a')
+        with open('reaction_data.csv', 'a') as f:
+            # Get a simple timestamp (seconds since boot)
+            timestamp = int(time.ticks_ms() / 1000)
+            # Write: Timestamp, Mode (Visual/Audio), Time
+            f.write("{},{},{}\n".format(timestamp, mode, time_ms))
+        print("Data saved: " + mode + " - " + str(time_ms))
+    except Exception as e:
+        print("Error saving data:", e)
+        
 def pickDigit(digit):
-    for i in range(4):
+    for i in range(4): 
         placePin[i].value(1)
     placePin[digit].value(0)
 
 def clearDisplay():
     hc595_shift(0x00)
-
-def hc595_shift(dat):
+    
+def hc595_shift(dat): 
     rclk.low()
     time.sleep_us(200)
     for bit in range(7, -1, -1):
-        srclk.low()
+        srclk.low() #getting clk rdy
         time.sleep_us(200)
-        value = 1 & (dat >> bit)
-        sdi.value(value)
+        value = 1 & (dat >> bit) #returns 1 bit of value, from most first to least, shifts the byte number 7 times, then 6, etc
+        sdi.value(value) #sendning the data
         time.sleep_us(200)
-        srclk.high()
+        srclk.high() #shifts and caputrues data
         time.sleep_us(200)
     time.sleep_us(200)
-    rclk.high()
+    rclk.high() #leds change to what the data says
     
-
+#displays the number but needs to put in in the array by each digit
 def display(num):
-    digits = [num % 10, (num // 10) % 10, (num // 100) % 10, (num // 1000) % 10]
+    digits = [num % 10, (num // 10) % 10, (num // 100) % 10, (num // 1000) % 10] #this gets the ones place, then tens, etc. 
     
     for i in range(4):
-        pickDigit(i)
-        hc595_shift(SEGCODE[digits[i]])
+        pickDigit(i) #this returns each of the numbers in the 4 digit number
+        hc595_shift(SEGCODE[digits[i]]) #segcode at digits[i] is the secode of a number, which the segcode[8] is 0xfa for ex (hex) and get converted to binary which tells it which lights to turn on
         time.sleep_ms(1)  # Small delay for stable display
 
 # Setup
@@ -106,6 +120,8 @@ def led_game():
         
         end = time.ticks_ms()
         elapsed = end - start
+        log_to_csv("Visual", elapsed)
+
         
         if highest_value is None or elapsed < highest_value: # if the time is less than the highest value than that is the new value
             highest_value = elapsed
@@ -138,6 +154,8 @@ def buzzer_game():
 
         end = time.ticks_ms()
         elapsed = end - start
+        log_to_csv("Audio", elapsed)
+
 
         if highest_value is None or elapsed < highest_value:
             highest_value = elapsed
@@ -154,6 +172,12 @@ def buzzer_game():
 
 # Main function
 def main():
+        try:
+        with open('reaction_data.csv', 'r') as f:
+            pass
+    except OSError:
+        with open('reaction_data.csv', 'w') as f:
+            f.write("Timestamp,Mode,ReactionTime_ms\n")
     while True:
         # Reset LEDs
         led1.value(0)
